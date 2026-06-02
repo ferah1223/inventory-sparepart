@@ -2,6 +2,10 @@
 
 Sistem inventarisasi barang gudang spare part sepeda motor berbasis web. Dibuat dengan PHP, HTML, CSS, dan MySQL.
 
+## Preview
+
+![Dashboard](assets/img/dashboard.png)
+
 ## Fitur
 
 - **Dashboard** — Ringkasan stok, transaksi hari ini, stok menipis
@@ -17,7 +21,7 @@ Sistem inventarisasi barang gudang spare part sepeda motor berbasis web. Dibuat 
 - PHP 8.x
 - MySQL 8.x
 - HTML5 + CSS3
-- Bootstrap-icons via Font Awesome 6
+- Font Awesome 6
 - Google Fonts (Poppins + Open Sans)
 
 ## Cara Install
@@ -65,8 +69,10 @@ inventory-sparepart/
 ├── includes/
 │   └── sidebar.php        # Navigasi sidebar
 ├── assets/
-│   └── css/
-│       └── style.css      # Design system 2026
+│   ├── css/
+│   │   └── style.css      # Design system 2026
+│   └── img/
+│       └── dashboard.png  # Screenshot dashboard
 ├── index.php              # Login
 ├── dashboard.php          # Dashboard utama
 ├── barang.php             # CRUD barang
@@ -79,6 +85,14 @@ inventory-sparepart/
 ├── database.sql           # Schema + data awal
 └── README.md
 ```
+
+## Data Sample
+
+Sudah termasuk data awal:
+- 22 jenis spare part (Oli, Kampas Rem, Ban, Busi, Rantai, Filter, Lampu, Komponen Mesin)
+- 8 kategori
+- 6 transaksi masuk
+- 5 transaksi keluar
 
 ## Rumus Stok
 
