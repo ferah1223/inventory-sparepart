@@ -3,6 +3,8 @@
 require_once 'config/database.php';
 requireAdmin();
 
+$page_title = 'Kelola User — Inventaris Bengkel Jaya';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     

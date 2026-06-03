@@ -3,7 +3,12 @@
 require_once 'config/database.php';
 requireLogin();
 
-$barang_id = $_GET['barang_id'] ?? 0;
+$barang_id = (int)($_GET['barang_id'] ?? 0);
+
+if ($barang_id <= 0) {
+    echo '<div class="text-center text-muted" style="padding:24px;">Parameter tidak valid.</div>';
+    exit;
+}
 
 $stmt = $pdo->prepare("
     SELECT hh.*, u.nama_lengkap 

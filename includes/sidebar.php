@@ -96,7 +96,7 @@ if (isset($pdo)) {
             </div>
             <div class="sidebar-user-info">
                 <div class="sidebar-user-name"><?= sanitize($_SESSION['nama_lengkap']) ?></div>
-                <div class="sidebar-user-role"><?= $_SESSION['role'] ?></div>
+                <div class="sidebar-user-role"><?= sanitize($_SESSION['role']) ?></div>
             </div>
         </div>
         <a href="logout.php" class="btn btn-outline btn-sm w-full">

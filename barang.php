@@ -384,7 +384,6 @@ function openModal(action, data = null) {
         document.getElementById('hapusModal').classList.add('show');
         return;
     }
-    // ... existing code for tambah/edit
     const modal = document.getElementById('formModal');
     const title = document.getElementById('modalTitle');
     const formAction = document.getElementById('formAction');

@@ -1466,43 +1466,7 @@ tr.row-divergence:hover {
     border-bottom: 1px solid var(--border-light);
 }
 
-/* Badge with icon */
-.badge i {
-    margin-right: 3px;
-}
-
-/* Supplier combo input */
-.combo-input-wrapper {
-    position: relative;
-}
-
-.combo-input-wrapper .form-control {
-    padding-right: 36px;
-}
-
-.combo-input-wrapper .combo-toggle {
-    position: absolute;
-    right: 1px;
-    top: 1px;
-    bottom: 1px;
-    width: 34px;
-    background: var(--bg-muted);
-    border: none;
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
-    cursor: pointer;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.combo-input-wrapper .combo-toggle:hover {
-    color: var(--text);
-}
-
-/* ============================================
-   Export & Print Styles
-   ============================================ */
+/* Row divergence highlight */
 @media print {
     body {
         background: #fff !important;
@@ -1512,7 +1476,8 @@ tr.row-divergence:hover {
     .btn, .modal, .modal-overlay, .no-print,
     .pagination, .search-box, .toolbar,
     .global-search-header, .loading-overlay,
-    #deleteConfirmModal {
+    #deleteConfirmModal,
+    .chart-grid, .export-toolbar, .alert {
         display: none !important;
     }
     .main-content {

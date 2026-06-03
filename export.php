@@ -628,7 +628,7 @@ ob_start();
 </div>
 
 <div class="meta">
-    <div><strong>Dicetak oleh:</strong> <?= sanitize($_SESSION['nama_lengkap']) ?> (<?= $_SESSION['role'] ?>)</div>
+    <div><strong>Dicetak oleh:</strong> <?= sanitize($_SESSION['nama_lengkap']) ?> (<?= sanitize($_SESSION['role']) ?>)</div>
     <div><strong>Tanggal:</strong> <?= date('d F Y, H:i') ?></div>
 </div>
 
