@@ -55,6 +55,39 @@ $stok_menipis_list = $pdo->query("
     ORDER BY b.stok ASC LIMIT 5
 ")->fetchAll();
 
+// Chart Data: Monthly masuk vs keluar for last 6 months
+$chart_labels = [];
+$chart_masuk = [];
+$chart_keluar = [];
+
+for ($i = 5; $i >= 0; $i--) {
+    $month = date('m', strtotime("-$i months"));
+    $year = date('Y', strtotime("-$i months"));
+    $monthName = date('M Y', strtotime("-$i months"));
+    $chart_labels[] = $monthName;
+
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(jumlah), 0) as total FROM barang_masuk WHERE MONTH(tanggal_masuk) = ? AND YEAR(tanggal_masuk) = ?");
+    $stmt->execute([$month, $year]);
+    $chart_masuk[] = (int)$stmt->fetch()['total'];
+
+    $stmt = $pdo->prepare("SELECT COALESCE(SUM(jumlah), 0) as total FROM barang_keluar WHERE MONTH(tanggal_keluar) = ? AND YEAR(tanggal_keluar) = ?");
+    $stmt->execute([$month, $year]);
+    $chart_keluar[] = (int)$stmt->fetch()['total'];
+}
+
+// Chart Data: Stock distribution per kategori
+$kategori_chart = $pdo->query("
+    SELECT k.nama_kategori, COALESCE(SUM(b.stok), 0) as total_stok
+    FROM kategori k
+    LEFT JOIN barang b ON k.id = b.kategori_id AND b.aktif = 1
+    GROUP BY k.id
+    HAVING total_stok > 0
+    ORDER BY total_stok DESC
+")->fetchAll();
+
+$kategori_labels = array_column($kategori_chart, 'nama_kategori');
+$kategori_stok = array_column($kategori_chart, 'total_stok');
+
 include 'includes/header.php';
 include 'includes/sidebar.php';
 ?>
@@ -111,6 +144,26 @@ include 'includes/sidebar.php';
         </div>
     </div>
     <?php endif; ?>
+
+    <!-- Charts -->
+    <div class="chart-grid animate-in">
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-chart-line text-success"></i> Transaksi Masuk vs Keluar (6 Bulan)</h3>
+            </div>
+            <div class="card-body">
+                <canvas id="transaksiChart" height="250"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-chart-pie text-info"></i> Distribusi Stok per Kategori</h3>
+            </div>
+            <div class="card-body">
+                <canvas id="kategoriChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
 
     <!-- Transaksi Hari Ini -->
     <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
@@ -251,6 +304,148 @@ include 'includes/sidebar.php';
     </div>
     <?php endif; ?>
 </div>
+
+<!-- Chart.js initialization -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Monthly Masuk vs Keluar - Line Chart
+    const transaksiCtx = document.getElementById('transaksiChart').getContext('2d');
+    new Chart(transaksiCtx, {
+        type: 'line',
+        data: {
+            labels: <?= json_encode($chart_labels) ?>,
+            datasets: [
+                {
+                    label: 'Barang Masuk',
+                    data: <?= json_encode($chart_masuk) ?>,
+                    borderColor: '#059669',
+                    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#059669',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                },
+                {
+                    label: 'Barang Keluar',
+                    data: <?= json_encode($chart_keluar) ?>,
+                    borderColor: '#dc2626',
+                    backgroundColor: 'rgba(220, 38, 38, 0.08)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#dc2626',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 20,
+                        font: { family: "'Open Sans', sans-serif", size: 13, weight: '600' }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleFont: { family: "'Poppins', sans-serif", size: 13 },
+                    bodyFont: { family: "'Open Sans', sans-serif", size: 12 },
+                    padding: 12,
+                    cornerRadius: 10,
+                    displayColors: true
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' },
+                    ticks: { font: { family: "'Open Sans', sans-serif", size: 12 } }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { family: "'Open Sans', sans-serif", size: 12 } }
+                }
+            }
+        }
+    });
+
+    // Stock Distribution per Kategori - Doughnut Chart
+    const kategoriCtx = document.getElementById('kategoriChart').getContext('2d');
+    const kategoriColors = [
+        '#059669', '#0284c7', '#d97706', '#dc2626', '#7c3aed',
+        '#0891b2', '#ea580c', '#4f46e5', '#16a34a', '#be185d'
+    ];
+    new Chart(kategoriCtx, {
+        type: 'doughnut',
+        data: {
+            labels: <?= json_encode($kategori_labels) ?>,
+            datasets: [{
+                data: <?= json_encode($kategori_stok) ?>,
+                backgroundColor: kategoriColors.slice(0, <?= count($kategori_labels) ?>),
+                borderColor: '#fff',
+                borderWidth: 3,
+                hoverBorderWidth: 0,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 14,
+                        font: { family: "'Open Sans', sans-serif", size: 12, weight: '500' },
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => ({
+                                    text: label + ' (' + data.datasets[0].data[i] + ')',
+                                    fillStyle: data.datasets[0].backgroundColor[i],
+                                    strokeStyle: '#fff',
+                                    lineWidth: 2,
+                                    pointStyle: 'circle',
+                                    hidden: false,
+                                    index: i
+                                }));
+                            }
+                            return [];
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleFont: { family: "'Poppins', sans-serif", size: 13 },
+                    bodyFont: { family: "'Open Sans', sans-serif", size: 12 },
+                    padding: 12,
+                    cornerRadius: 10,
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return context.label + ': ' + context.parsed + ' unit (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
 
 </body>
 </html>

@@ -111,4 +111,17 @@ function generateNoTransaksi($prefix, $pdo, $table, $column = 'no_transaksi') {
 function sanitize($input) {
     return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
 }
+
+function addAuditLog($pdo, $action, $table, $recordId, $oldValues = null, $newValues = null) {
+    $stmt = $pdo->prepare("INSERT INTO audit_log (user_id, action, table_name, record_id, old_values, new_values, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([
+        $_SESSION['user_id'] ?? null,
+        $action,
+        $table,
+        $recordId,
+        $oldValues ? json_encode($oldValues, JSON_UNESCAPED_UNICODE) : null,
+        $newValues ? json_encode($newValues, JSON_UNESCAPED_UNICODE) : null,
+        $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'
+    ]);
+}
 ?>

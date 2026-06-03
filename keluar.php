@@ -31,6 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['tanggal_keluar'], $_POST['tujuan'], $_POST['penerima'], $_POST['keterangan'], $_SESSION['user_id']
         ]);
         
+        $newId = $pdo->lastInsertId();
+        addAuditLog($pdo, 'create', 'barang_keluar', $newId, null, [
+            'no_transaksi' => $no_transaksi, 'barang_id' => $_POST['barang_id'],
+            'jumlah' => $jumlah, 'tujuan' => $_POST['tujuan'], 'penerima' => $_POST['penerima']
+        ]);
+        
         // Kurangi stok
         $stmt = $pdo->prepare("UPDATE barang SET stok = stok - ? WHERE id = ?");
         $stmt->execute([$jumlah, $_POST['barang_id']]);
@@ -44,6 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$_POST['id']]);
         $bk = $stmt->fetch();
         
+        // Capture old values
+        $stmt_old = $pdo->prepare("SELECT * FROM barang_keluar WHERE id = ?");
+        $stmt_old->execute([$_POST['id']]);
+        $old = $stmt_old->fetch();
+        
         if ($bk) {
             $stmt = $pdo->prepare("UPDATE barang SET stok = stok + ? WHERE id = ?");
             $stmt->execute([$bk['jumlah'], $bk['barang_id']]);
@@ -51,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $stmt = $pdo->prepare("DELETE FROM barang_keluar WHERE id=?");
         $stmt->execute([$_POST['id']]);
+        if ($old) {
+            addAuditLog($pdo, 'delete', 'barang_keluar', $_POST['id'], $old, null);
+        }
         setFlash('success', 'Data barang keluar berhasil dihapus (stok dikembalikan).');
         redirect('keluar.php');
     }
@@ -196,7 +210,7 @@ include 'includes/sidebar.php';
                             <td class="fw-600"><?= rupiah($k['total_harga']) ?></td>
                             <td class="text-muted"><?= sanitize($k['tujuan'] ?? '-') ?></td>
                             <td>
-                                <button onclick="if(confirm('Yakin hapus? Stok akan dikembalikan.')) document.getElementById('hapus-<?= $k['id'] ?>').submit()" class="btn btn-ghost btn-sm">
+                                <button onclick="showDeleteConfirm('Yakin hapus data barang keluar ini? Stok akan dikembalikan.', 'hapus-<?= $k['id'] ?>')" class="btn btn-ghost btn-sm">
                                     <i class="fas fa-trash text-danger"></i>
                                 </button>
                                 <form id="hapus-<?= $k['id'] ?>" method="POST" style="display:none;">

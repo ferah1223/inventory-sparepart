@@ -1,6 +1,7 @@
 <?php
-// export.php - Export Data ke CSV, PDF (via HTML), atau Print
+// export.php - Export Data ke CSV, PDF (via MiniPDF), atau Print
 require_once 'config/database.php';
+require_once 'lib/minipdf.php';
 requireLogin();
 
 $type = $_GET['type'] ?? '';       // masuk, keluar, stok, kategori, laporan
@@ -171,7 +172,7 @@ if ($type === 'masuk') {
     $title = "Laporan Inventaris Lengkap — " . bulanIndo($bulan) . " $tahun";
 
     // For CSV: we'll combine all data into sections
-    // For PDF/Print: generate HTML
+    // For PDF/Print: generate HTML or PDF
     $headers = null;
     $rows = null;
 } else {
@@ -180,7 +181,7 @@ if ($type === 'masuk') {
 }
 
 // ==========================================
-// CSV EXPORT
+// CSV EXPORT (unchanged)
 // ==========================================
 if ($format === 'csv') {
     $filename = "export_{$type}_{$bulan}_{$tahun}_" . date('YmdHis') . ".csv";
@@ -242,10 +243,336 @@ if ($format === 'csv') {
 }
 
 // ==========================================
-// PDF & PRINT → Generate HTML
+// PDF EXPORT — Real binary PDF via MiniPDF
+// ==========================================
+if ($format === 'pdf') {
+    $pdf = new MiniPDF();
+
+    // Brand color: green #059669 → RGB(5, 150, 105)
+    $brandGreen  = [5, 150, 105];
+    $darkText     = [15, 23, 42];       // #0f172a
+    $grayText     = [100, 116, 139];    // #64748b
+    $lightBg      = [248, 250, 252];    // #f8fafc (alternating row)
+    $whiteBg      = [255, 255, 255];
+    $headerGreen  = [5, 150, 105];      // table header bg
+    $summaryBg    = [240, 253, 244];    // #f0fdf4 (summary row bg)
+
+    $pdf->setAutoPageBreak(true, 40);
+
+    // ---- Helper: render the page header (brand + title + metadata) ----
+    $renderHeader = function(MiniPDF $pdf, string $title) use ($brandGreen, $darkText, $grayText) {
+        // Brand name
+        $pdf->setFont('Helvetica', 'B', 20);
+        $pdf->setTextColor($brandGreen);
+        $w = $pdf->getContentWidth();
+        $brandW = $pdf->getStringWidth('BENGKEL JAYA');
+        $pdf->setXY(($pdf->A4_WIDTH - $brandW) / 2, $pdf->getY());
+        $pdf->cell($brandW, 12, 'BENGKEL JAYA', 0, 'L', false, true);
+
+        // Title
+        $pdf->setFont('Helvetica', 'B', 14);
+        $pdf->setTextColor($darkText);
+        $titleW = $pdf->getStringWidth($title);
+        $pdf->setXY(($pdf->A4_WIDTH - $titleW) / 2, $pdf->getY());
+        $pdf->cell($titleW, 8, $title, 0, 'L', false, true);
+
+        // Subtitle
+        $pdf->setFont('Helvetica', '', 9);
+        $pdf->setTextColor($grayText);
+        $sub = 'Sistem Inventaris Spare Part Sepeda Motor';
+        $subW = $pdf->getStringWidth($sub);
+        $pdf->setXY(($pdf->A4_WIDTH - $subW) / 2, $pdf->getY());
+        $pdf->cell($subW, 6, $sub, 0, 'L', false, true);
+
+        // Green divider line
+        $pdf->setDrawColor($brandGreen);
+        $pdf->setLineWidth(2);
+        $pdf->hr($pdf->getY() + 3, $pdf->marginLeft, $pdf->A4_WIDTH - $pdf->marginRight);
+        $pdf->setLineWidth(0.5);
+        $pdf->setDrawColor([0, 0, 0]);
+
+        $pdf->setY($pdf->getY() + 10);
+
+        // Metadata: user + date
+        $pdf->setFont('Helvetica', '', 9);
+        $pdf->setTextColor($grayText);
+        $user = sanitize($_SESSION['nama_lengkap'] ?? 'System');
+        $role = $_SESSION['role'] ?? '';
+        $pdf->setX($pdf->marginLeft);
+        $pdf->cell($w / 2, 5, "Dicetak oleh: {$user} ({$role})", 0, 'L');
+        $pdf->cell($w / 2, 5, 'Tanggal: ' . date('d/m/Y H:i'), 0, 'R', false, true);
+
+        $pdf->setY($pdf->getY() + 6);
+    };
+
+    // ---- Helper: auto-calculate column widths from headers + data ----
+    $calcWidths = function(MiniPDF $pdf, array $headers, array $dataRows, array $mapFn): array {
+        $numCols = count($headers);
+        $contentW = $pdf->getContentWidth();
+
+        // Calculate max width per column (header vs data)
+        $maxWidths = [];
+        for ($c = 0; $c < $numCols; $c++) {
+            $maxWidths[$c] = $pdf->getStringWidth($headers[$c]) + 8;
+        }
+        foreach ($dataRows as $i => $r) {
+            $mapped = $mapFn($i + 1, $r);
+            for ($c = 0; $c < $numCols; $c++) {
+                $val = (string)($mapped[$c] ?? '');
+                $tw = $pdf->getStringWidth($val) + 8;
+                if ($tw > $maxWidths[$c]) {
+                    $maxWidths[$c] = $tw;
+                }
+            }
+        }
+
+        // Cap total width to content area
+        $total = array_sum($maxWidths);
+        if ($total > $contentW) {
+            $scale = $contentW / $total;
+            foreach ($maxWidths as &$mw) {
+                $mw = max($mw * $scale, 20); // minimum 20pt per column
+            }
+        }
+
+        // Re-check after scaling
+        $total = array_sum($maxWidths);
+        // Distribute any remaining space proportionally
+        if ($total < $contentW) {
+            $extra = $contentW - $total;
+            $perCol = $extra / $numCols;
+            foreach ($maxWidths as &$mw) {
+                $mw += $perCol;
+            }
+        }
+
+        return $maxWidths;
+    };
+
+    // ---- Helper: render a table with header, data rows, alternating colors, summary ----
+    $renderTable = function(MiniPDF $pdf, array $headers, array $dataRows, array $widths,
+                            array $mapFn, string $summaryLabel = '', float $summaryValue = 0) use ($headerGreen, $darkText, $lightBg, $whiteBg, $summaryBg) {
+        $rowH = 7;
+        $numCols = count($headers);
+        $contentW = $pdf->getContentWidth();
+
+        // Header row
+        $pdf->setFillColor($headerGreen);
+        $pdf->setTextColor([255, 255, 255]);
+        $pdf->setFont('Helvetica', 'B', 7);
+        $pdf->checkPageBreak($rowH);
+        $pdf->row($rowH, $headers, $widths, 1, array_fill(0, $numCols, 'C'), true);
+
+        // Data rows
+        $pdf->setFont('Helvetica', '', 7);
+        $pdf->setTextColor($darkText);
+        foreach ($dataRows as $i => $r) {
+            $mapped = $mapFn($i + 1, $r);
+            // Ensure mapped array has correct count
+            $mapped = array_pad($mapped, $numCols, '');
+            $mapped = array_slice($mapped, 0, $numCols);
+
+            // Alternating row background
+            $isEven = ($i % 2 === 0);
+            $pdf->setFillColor($isEven ? $whiteBg : $lightBg);
+
+            $pdf->checkPageBreak($rowH);
+            $pdf->row($rowH, $mapped, $widths, 1, array_fill(0, $numCols, 'L'), true);
+        }
+
+        // Summary row
+        if ($summaryLabel !== '' && count($dataRows) > 0) {
+            $pdf->checkPageBreak($rowH + 4);
+            $pdf->setFillColor($summaryBg);
+            $pdf->setFont('Helvetica', 'B', 8);
+            $pdf->setTextColor($brandGreen);
+
+            $label = $summaryLabel . ': Rp ' . number_format($summaryValue, 0, ',', '.') .
+                     ' (' . count($dataRows) . ' transaksi)';
+            $pdf->cell($contentW, $rowH + 2, $label, 1, 'R', true, true);
+        }
+    };
+
+    // ======================================================================
+    // Generate PDF per type
+    // ======================================================================
+
+    if ($type === 'laporan') {
+        // ==========================================
+        // LAPORAN: Summary report with multiple sections
+        // ==========================================
+        $pdf->addPage();
+        $renderHeader($pdf, $title);
+        $contentW = $pdf->getContentWidth();
+
+        // Section: Ringkasan Stok (4 stat boxes)
+        $pdf->setFont('Helvetica', 'B', 11);
+        $pdf->setTextColor($darkText);
+        $pdf->cell($contentW, 8, 'Ringkasan Stok', 0, 'L', false, true);
+        $pdf->setY($pdf->getY() + 2);
+
+        // Draw 4 stat cards in a row
+        $cardW = ($contentW - 9) / 4; // 3pt gap between cards
+        $cardH = 22;
+        $statsData = [
+            ['Total Jenis Barang', number_format($stats['total_barang']), $brandGreen],
+            ['Total Stok', number_format($stats['total_stok']), $brandGreen],
+            ['Nilai Stok (Modal)', rupiah($stats['nilai_stok']), [37, 99, 235]], // blue
+            ['Stok Menipis', (string)$stats['stok_menipis'], [220, 38, 38]],     // red
+        ];
+
+        $startX = $pdf->marginLeft;
+        $startY = $pdf->getY();
+        foreach ($statsData as $idx => $sd) {
+            $cx = $startX + $idx * ($cardW + 3);
+            // Card background
+            $pdf->rect($cx, $startY, $cardW, $cardH, [241, 245, 249]); // #f1f5f9
+            // Left accent bar
+            $pdf->rect($cx, $startY, 3, $cardH, $sd[2]);
+            // Label
+            $pdf->setXY($cx + 8, $startY + 3);
+            $pdf->setFont('Helvetica', '', 7);
+            $pdf->setTextColor([100, 116, 139]);
+            $pdf->cell($cardW - 12, 5, $sd[0], 0, 'L');
+            // Value
+            $pdf->setXY($cx + 8, $startY + 11);
+            $pdf->setFont('Helvetica', 'B', 11);
+            $pdf->setTextColor($darkText);
+            $pdf->cell($cardW - 12, 8, $sd[1], 0, 'L');
+        }
+        $pdf->setY($startY + $cardH + 8);
+
+        // Section: Ringkasan Transaksi
+        $pdf->setFont('Helvetica', 'B', 11);
+        $pdf->setTextColor($darkText);
+        $pdf->cell($contentW, 8, 'Ringkasan Transaksi — ' . bulanIndo($bulan) . ' ' . $tahun, 0, 'L', false, true);
+        $pdf->setY($pdf->getY() + 2);
+
+        $transHeaders = ['Keterangan', 'Barang Masuk', 'Barang Keluar'];
+        $transWidths = [$contentW * 0.40, $contentW * 0.30, $contentW * 0.30];
+        $transData = [
+            ['Jumlah Transaksi', $masuk['cnt'], $keluar['cnt']],
+            ['Total Item', number_format($masuk['qty']), number_format($keluar['qty'])],
+            ['Total Nilai', rupiah($masuk['nilai']), rupiah($keluar['nilai'])],
+        ];
+
+        // Transaksi table header
+        $rowH = 7;
+        $pdf->setFillColor($headerGreen);
+        $pdf->setTextColor([255, 255, 255]);
+        $pdf->setFont('Helvetica', 'B', 8);
+        $pdf->row($rowH, $transHeaders, $transWidths, 1, ['L', 'R', 'R'], true);
+        $pdf->setFont('Helvetica', '', 8);
+        $pdf->setTextColor($darkText);
+        foreach ($transData as $ti => $tr) {
+            $pdf->setFillColor($ti % 2 === 0 ? $whiteBg : $lightBg);
+            $pdf->row($rowH, $tr, $transWidths, 1, ['L', 'R', 'R'], true);
+        }
+
+        $pdf->setY($pdf->getY() + 6);
+
+        // Section: Stok per Kategori
+        $pdf->checkPageBreak(30);
+        $pdf->setFont('Helvetica', 'B', 11);
+        $pdf->setTextColor($darkText);
+        $pdf->cell($contentW, 8, 'Stok per Kategori', 0, 'L', false, true);
+        $pdf->setY($pdf->getY() + 2);
+
+        $katHeaders = ['Kategori', 'Jenis', 'Stok', 'Nilai Stok'];
+        $katWidths = [$contentW * 0.35, $contentW * 0.15, $contentW * 0.20, $contentW * 0.30];
+
+        $pdf->setFillColor($headerGreen);
+        $pdf->setTextColor([255, 255, 255]);
+        $pdf->setFont('Helvetica', 'B', 8);
+        $pdf->row($rowH, $katHeaders, $katWidths, 1, ['L', 'C', 'R', 'R'], true);
+
+        $pdf->setFont('Helvetica', '', 8);
+        $pdf->setTextColor($darkText);
+        $totalKatNilai = 0;
+        foreach ($per_kategori as $ki => $pk) {
+            $pdf->setFillColor($ki % 2 === 0 ? $whiteBg : $lightBg);
+            $pdf->checkPageBreak($rowH);
+            $pdf->row($rowH, [
+                $pk['nama_kategori'],
+                $pk['jumlah_item'],
+                number_format($pk['total_stok']),
+                rupiah($pk['nilai_stok'])
+            ], $katWidths, 1, ['L', 'C', 'R', 'R'], true);
+            $totalKatNilai += $pk['nilai_stok'];
+        }
+
+        // Summary
+        $pdf->setFillColor($summaryBg);
+        $pdf->setFont('Helvetica', 'B', 8);
+        $pdf->setTextColor($brandGreen);
+        $pdf->checkPageBreak($rowH + 2);
+        $pdf->cell(array_sum($katWidths), $rowH, 'Total Nilai Stok: ' . rupiah($totalKatNilai), 1, 'R', true, true);
+
+        $pdf->setY($pdf->getY() + 6);
+
+        // Section: Barang Stok Menipis
+        if (!empty($stok_menipis)) {
+            $pdf->checkPageBreak(30);
+            $pdf->setFont('Helvetica', 'B', 11);
+            $pdf->setTextColor($darkText);
+            $pdf->cell($contentW, 8, 'Barang Stok Menipis (' . count($stok_menipis) . ')', 0, 'L', false, true);
+            $pdf->setY($pdf->getY() + 2);
+
+            $menipisHeaders = ['Kode', 'Nama Barang', 'Kategori', 'Stok', 'Minimum', 'Status'];
+            $menipisWidths = [
+                $contentW * 0.14, $contentW * 0.28, $contentW * 0.20,
+                $contentW * 0.10, $contentW * 0.10, $contentW * 0.18
+            ];
+
+            $pdf->setFillColor($headerGreen);
+            $pdf->setTextColor([255, 255, 255]);
+            $pdf->setFont('Helvetica', 'B', 8);
+            $pdf->row($rowH, $menipisHeaders, $menipisWidths, 1, ['L', 'L', 'L', 'C', 'C', 'C'], true);
+
+            $pdf->setTextColor($darkText);
+            foreach ($stok_menipis as $mi => $s) {
+                $pdf->setFillColor($mi % 2 === 0 ? $whiteBg : $lightBg);
+                $pdf->checkPageBreak($rowH);
+                $status = $s['stok'] == 0 ? 'HABIS' : 'Menipis';
+                $pdf->setFont('Helvetica', '', 8);
+                $pdf->row($rowH, [
+                    $s['kode_barang'],
+                    $s['nama_barang'],
+                    $s['nama_kategori'] ?? '-',
+                    (string)$s['stok'],
+                    (string)$s['stok_minimum'],
+                    $status
+                ], $menipisWidths, 1, ['L', 'L', 'L', 'C', 'C', 'C'], true);
+            }
+        }
+
+    } else {
+        // ==========================================
+        // MASUK / KELUAR / STOK: Standard data table
+        // ==========================================
+        $pdf->addPage();
+        $renderHeader($pdf, $title);
+
+        // Auto-calculate column widths
+        $widths = $calcWidths($pdf, $headers, $rows, $map);
+
+        // Render the data table
+        $renderTable($pdf, $headers, $rows, $widths, $map, $summary_label, $summary_value);
+    }
+
+    // ---- Footer: page numbers at bottom center of every page ----
+    $pdf->pageNumbers('Halaman {pn} dari {nb}', 8);
+
+    // ---- Output the PDF as a file download ----
+    $filename = "export_{$type}_{$bulan}_{$tahun}_" . date('YmdHis') . ".pdf";
+    $pdf->output($filename);
+    exit;
+}
+
+// ==========================================
+// PRINT → Generate HTML (unchanged)
 // ==========================================
 if ($type === 'laporan') {
-    // Full report HTML
     $data_sections = true;
 } else {
     $data_sections = false;
@@ -417,7 +744,6 @@ ob_start();
     <div>Halaman ini digenerate secara otomatis pada <?= date('d/m/Y H:i:s') ?></div>
 </div>
 
-<?php if ($format === 'print'): ?>
 <div class="no-print" style="position:fixed;top:16px;right:16px;z-index:9999;">
     <button onclick="window.print()" style="padding:10px 24px;background:#059669;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;">
         🖨️ Cetak Sekarang
@@ -427,24 +753,13 @@ ob_start();
     </button>
 </div>
 <script>window.onload = function() { /* Auto print disabled — user clicks button */ };</script>
-<?php elseif ($format === 'pdf'): ?>
-<div class="no-print" style="position:fixed;top:16px;right:16px;z-index:9999;">
-    <button onclick="window.print()" style="padding:10px 24px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;">
-        📄 Simpan sebagai PDF
-    </button>
-    <button onclick="window.close()" style="padding:10px 24px;background:#64748b;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-left:8px;">
-        ✕ Tutup
-    </button>
-</div>
-<script>window.onload = function() { window.print(); };</script>
-<?php endif; ?>
 
 </body>
 </html>
 <?php
 $html = ob_get_clean();
 
-if ($format === 'pdf' || $format === 'print') {
+if ($format === 'print') {
     header('Content-Type: text/html; charset=utf-8');
     echo $html;
     exit;

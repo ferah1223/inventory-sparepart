@@ -15,23 +15,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['kode_barang'], $_POST['nama_barang'], $_POST['kategori_id'] ?: null,
             $_POST['satuan'], 0, $_POST['stok_minimum'], $_POST['harga_beli'], $_POST['harga_jual'], $_POST['lokasi_rak']
         ]);
+        $newId = $pdo->lastInsertId();
+        addAuditLog($pdo, 'create', 'barang', $newId, null, [
+            'kode_barang' => $_POST['kode_barang'], 'nama_barang' => $_POST['nama_barang'],
+            'kategori_id' => $_POST['kategori_id'], 'satuan' => $_POST['satuan'],
+            'stok_minimum' => $_POST['stok_minimum'], 'harga_beli' => $_POST['harga_beli'],
+            'harga_jual' => $_POST['harga_jual'], 'lokasi_rak' => $_POST['lokasi_rak']
+        ]);
         setFlash('success', 'Barang berhasil ditambahkan.');
         redirect('barang.php');
     }
     
     if ($action === 'edit') {
+        // Get old values for audit & price history
+        $stmt = $pdo->prepare("SELECT * FROM barang WHERE id=?");
+        $stmt->execute([$_POST['id']]);
+        $old = $stmt->fetch();
+        
         $stmt = $pdo->prepare("UPDATE barang SET nama_barang=?, kategori_id=?, satuan=?, stok_minimum=?, harga_beli=?, harga_jual=?, lokasi_rak=? WHERE id=?");
         $stmt->execute([
             $_POST['nama_barang'], $_POST['kategori_id'] ?: null, $_POST['satuan'],
             $_POST['stok_minimum'], $_POST['harga_beli'], $_POST['harga_jual'], $_POST['lokasi_rak'], $_POST['id']
+        ]);
+        
+        // Price history - log if harga_beli or harga_jual changed
+        if ($old && ($old['harga_beli'] != $_POST['harga_beli'] || $old['harga_jual'] != $_POST['harga_jual'])) {
+            $stmt_ph = $pdo->prepare("INSERT INTO harga_history (barang_id, harga_beli_lama, harga_beli_baru, harga_jual_lama, harga_jual_baru, user_id) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt_ph->execute([
+                $_POST['id'], $old['harga_beli'], $_POST['harga_beli'],
+                $old['harga_jual'], $_POST['harga_jual'], $_SESSION['user_id']
+            ]);
+            addAuditLog($pdo, 'update', 'harga_history', $_POST['id'], [
+                'harga_beli' => $old['harga_beli'], 'harga_jual' => $old['harga_jual']
+            ], [
+                'harga_beli' => $_POST['harga_beli'], 'harga_jual' => $_POST['harga_jual']
+            ]);
+        }
+        
+        addAuditLog($pdo, 'update', 'barang', $_POST['id'], [
+            'nama_barang' => $old['nama_barang'], 'kategori_id' => $old['kategori_id'],
+            'satuan' => $old['satuan'], 'stok_minimum' => $old['stok_minimum'],
+            'harga_beli' => $old['harga_beli'], 'harga_jual' => $old['harga_jual'],
+            'lokasi_rak' => $old['lokasi_rak']
+        ], [
+            'nama_barang' => $_POST['nama_barang'], 'kategori_id' => $_POST['kategori_id'],
+            'satuan' => $_POST['satuan'], 'stok_minimum' => $_POST['stok_minimum'],
+            'harga_beli' => $_POST['harga_beli'], 'harga_jual' => $_POST['harga_jual'],
+            'lokasi_rak' => $_POST['lokasi_rak']
         ]);
         setFlash('success', 'Data barang berhasil diupdate.');
         redirect('barang.php');
     }
     
     if ($action === 'hapus') {
+        // Capture old values before deletion
+        $stmt = $pdo->prepare("SELECT * FROM barang WHERE id=?");
+        $stmt->execute([$_POST['id']]);
+        $old = $stmt->fetch();
+        
         $stmt = $pdo->prepare("DELETE FROM barang WHERE id=?");
         $stmt->execute([$_POST['id']]);
+        if ($old) {
+            addAuditLog($pdo, 'delete', 'barang', $_POST['id'], $old, null);
+        }
         setFlash('success', 'Barang berhasil dihapus.');
         redirect('barang.php');
     }
@@ -193,6 +239,9 @@ include 'includes/sidebar.php';
                                     <button onclick="openModal('edit', <?= htmlspecialchars(json_encode($b)) ?>)" class="btn btn-ghost btn-sm" title="Edit">
                                         <i class="fas fa-pen text-warning"></i>
                                     </button>
+                                    <button onclick="showPriceHistory(<?= $b['id'] ?>, '<?= sanitize($b['kode_barang']) ?> - <?= sanitize(addslashes($b['nama_barang'])) ?>')" class="btn btn-ghost btn-sm" title="Riwayat Harga">
+                                        <i class="fas fa-history text-primary"></i>
+                                    </button>
                                     <button onclick="openModal('hapus', <?= htmlspecialchars(json_encode($b)) ?>)" class="btn btn-ghost btn-sm" title="Hapus">
                                         <i class="fas fa-trash text-danger"></i>
                                     </button>
@@ -329,46 +378,6 @@ include 'includes/sidebar.php';
 
 <script>
 function openModal(action, data = null) {
-    const modal = document.getElementById('formModal');
-    const title = document.getElementById('modalTitle');
-    const formAction = document.getElementById('formAction');
-    const kodeGroup = document.getElementById('kodeGroup');
-    
-    if (action === 'tambah') {
-        title.textContent = 'Tambah Barang';
-        formAction.value = 'tambah';
-        kodeGroup.style.display = 'block';
-        document.getElementById('formKode').required = true;
-        document.getElementById('formKode').value = '';
-        document.getElementById('formNama').value = '';
-        document.getElementById('formKategori').value = '';
-        document.getElementById('formSatuan').value = 'pcs';
-        document.getElementById('formStokMin').value = '5';
-        document.getElementById('formLokasi').value = '';
-        document.getElementById('formBeli').value = '0';
-        document.getElementById('formJual').value = '0';
-    } else if (action === 'edit' && data) {
-        title.textContent = 'Edit Barang';
-        formAction.value = 'edit';
-        kodeGroup.style.display = 'none';
-        document.getElementById('formKode').required = false;
-        document.getElementById('formId').value = data.id;
-        document.getElementById('formNama').value = data.nama_barang;
-        document.getElementById('formKategori').value = data.kategori_id || '';
-        document.getElementById('formSatuan').value = data.satuan;
-        document.getElementById('formStokMin').value = data.stok_minimum;
-        document.getElementById('formLokasi').value = data.lokasi_rak || '';
-        document.getElementById('formBeli').value = data.harga_beli;
-        document.getElementById('formJual').value = data.harga_jual;
-    }
-    modal.classList.add('show');
-}
-
-function closeModal() {
-    document.getElementById('formModal').classList.remove('show');
-}
-
-function openModal(action, data = null) {
     if (action === 'hapus' && data) {
         document.getElementById('hapusId').value = data.id;
         document.getElementById('hapusNama').textContent = data.nama_barang;
@@ -411,6 +420,10 @@ function openModal(action, data = null) {
     modal.classList.add('show');
 }
 
+function closeModal() {
+    document.getElementById('formModal').classList.remove('show');
+}
+
 function closeHapus() {
     document.getElementById('hapusModal').classList.remove('show');
 }
@@ -430,7 +443,41 @@ document.addEventListener('keydown', function(e) {
         document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
     }
 });
+
+function showPriceHistory(barangId, namaBarang) {
+    document.getElementById('priceHistoryTitle').textContent = 'Riwayat Harga: ' + namaBarang;
+    document.getElementById('priceHistoryBody').innerHTML = '<div class="text-center text-muted" style="padding:24px;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+    document.getElementById('priceHistoryModal').classList.add('show');
+    
+    fetch('api_harga_history.php?barang_id=' + barangId)
+        .then(r => r.text())
+        .then(html => {
+            document.getElementById('priceHistoryBody').innerHTML = html;
+        })
+        .catch(() => {
+            document.getElementById('priceHistoryBody').innerHTML = '<div class="text-center text-muted" style="padding:24px;">Gagal memuat data</div>';
+        });
+}
+
+function closePriceHistory() {
+    document.getElementById('priceHistoryModal').classList.remove('show');
+}
 </script>
+
+<!-- Modal Price History -->
+<div class="modal-overlay" id="priceHistoryModal">
+    <div class="modal" style="max-width:650px;">
+        <div class="modal-header">
+            <h3 id="priceHistoryTitle">Riwayat Harga</h3>
+            <button class="modal-close" onclick="closePriceHistory()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" id="priceHistoryBody" style="max-height:400px;overflow-y:auto;">
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closePriceHistory()">Tutup</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

@@ -14,10 +14,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $harga = (int)$_POST['harga_satuan'];
         $total = $jumlah * $harga;
         
-        $stmt = $pdo->prepare("INSERT INTO barang_masuk (no_transaksi, barang_id, jumlah, harga_satuan, total_harga, tanggal_masuk, supplier, keterangan, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        // Determine supplier text and supplier_id
+        $supplier_text = $_POST['supplier'] ?? '';
+        $supplier_id = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
+        if ($supplier_id) {
+            $stmt_s = $pdo->prepare("SELECT nama_supplier FROM supplier WHERE id = ?");
+            $stmt_s->execute([$supplier_id]);
+            $supplier_text = $stmt_s->fetchColumn() ?: $supplier_text;
+        }
+        
+        $stmt = $pdo->prepare("INSERT INTO barang_masuk (no_transaksi, barang_id, jumlah, harga_satuan, total_harga, tanggal_masuk, supplier, supplier_id, keterangan, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $no_transaksi, $_POST['barang_id'], $jumlah, $harga, $total,
-            $_POST['tanggal_masuk'], $_POST['supplier'], $_POST['keterangan'], $_SESSION['user_id']
+            $_POST['tanggal_masuk'], $supplier_text, $supplier_id, $_POST['keterangan'], $_SESSION['user_id']
+        ]);
+        
+        $newId = $pdo->lastInsertId();
+        addAuditLog($pdo, 'create', 'barang_masuk', $newId, null, [
+            'no_transaksi' => $no_transaksi, 'barang_id' => $_POST['barang_id'],
+            'jumlah' => $jumlah, 'supplier' => $supplier_text, 'supplier_id' => $supplier_id
         ]);
         
         // Update stok barang
@@ -34,6 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$_POST['id']]);
         $bm = $stmt->fetch();
         
+        // Capture old values
+        $stmt_old = $pdo->prepare("SELECT * FROM barang_masuk WHERE id = ?");
+        $stmt_old->execute([$_POST['id']]);
+        $old = $stmt_old->fetch();
+        
         if ($bm) {
             $stmt = $pdo->prepare("UPDATE barang SET stok = GREATEST(stok - ?, 0) WHERE id = ?");
             $stmt->execute([$bm['jumlah'], $bm['barang_id']]);
@@ -41,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $stmt = $pdo->prepare("DELETE FROM barang_masuk WHERE id=?");
         $stmt->execute([$_POST['id']]);
+        if ($old) {
+            addAuditLog($pdo, 'delete', 'barang_masuk', $_POST['id'], $old, null);
+        }
         setFlash('success', 'Data barang masuk berhasil dihapus.');
         redirect('masuk.php');
     }
@@ -98,6 +121,9 @@ $total_nilai = $stmt->fetch()['total'];
 
 // Barang untuk dropdown
 $barang_list = $pdo->query("SELECT id, kode_barang, nama_barang, satuan FROM barang WHERE aktif = 1 ORDER BY kode_barang")->fetchAll();
+
+// Supplier untuk dropdown
+$supplier_list = $pdo->query("SELECT id, nama_supplier FROM supplier WHERE aktif = 1 ORDER BY nama_supplier")->fetchAll();
 
 include 'includes/header.php';
 include 'includes/sidebar.php';
@@ -186,7 +212,7 @@ include 'includes/sidebar.php';
                             <td class="fw-600"><?= rupiah($m['total_harga']) ?></td>
                             <td class="text-muted"><?= sanitize($m['supplier'] ?? '-') ?></td>
                             <td>
-                                <button onclick="if(confirm('Yakin hapus?')) document.getElementById('hapus-<?= $m['id'] ?>').submit()" class="btn btn-ghost btn-sm">
+                                <button onclick="showDeleteConfirm('Yakin hapus data barang masuk ini?', 'hapus-<?= $m['id'] ?>')" class="btn btn-ghost btn-sm">
                                     <i class="fas fa-trash text-danger"></i>
                                 </button>
                                 <form id="hapus-<?= $m['id'] ?>" method="POST" style="display:none;">
@@ -266,7 +292,14 @@ include 'includes/sidebar.php';
                 
                 <div class="form-group">
                     <label class="form-label">Supplier</label>
-                    <input type="text" name="supplier" class="form-control" placeholder="Nama supplier/distributor">
+                    <select name="supplier_id" id="supplierSelect" class="form-select" onchange="toggleSupplierInput(this)">
+                        <option value="">-- Pilih Supplier --</option>
+                        <?php foreach ($supplier_list as $s): ?>
+                            <option value="<?= $s['id'] ?>"><?= sanitize($s['nama_supplier']) ?></option>
+                        <?php endforeach; ?>
+                        <option value="__custom">Ketik Manual...</option>
+                    </select>
+                    <input type="text" name="supplier" id="supplierCustom" class="form-control mt-1" placeholder="Nama supplier manual..." style="display:none;">
                 </div>
                 
                 <div class="form-group">
@@ -285,6 +318,17 @@ include 'includes/sidebar.php';
 <script>
 function openModal() { document.getElementById('formModal').classList.add('show'); }
 function closeModal() { document.getElementById('formModal').classList.remove('show'); }
+function toggleSupplierInput(select) {
+    const custom = document.getElementById('supplierCustom');
+    if (select.value === '__custom') {
+        custom.style.display = 'block';
+        custom.required = true;
+    } else {
+        custom.style.display = 'none';
+        custom.required = false;
+        custom.value = '';
+    }
+}
 document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('show'); }));
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show')); });
 </script>

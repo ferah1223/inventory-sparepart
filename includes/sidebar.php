@@ -1,4 +1,24 @@
 <!-- includes/sidebar.php -->
+<?php
+// Low stock count for badge
+if (isset($pdo)) {
+    $stmt_lowstock = $pdo->prepare("SELECT COUNT(*) as cnt FROM barang WHERE stok <= stok_minimum AND aktif = 1");
+    $stmt_lowstock->execute();
+    $low_stock_count = $stmt_lowstock->fetch()['cnt'];
+} else {
+    $low_stock_count = 0;
+}
+?>
+
+<!-- Global Search Bar -->
+<div class="global-search-header" id="globalSearchContainer">
+    <div class="global-search-wrapper">
+        <i class="fas fa-search global-search-icon"></i>
+        <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Cari barang berdasarkan nama atau kode..." autocomplete="off">
+        <div class="global-search-results" id="globalSearchResults"></div>
+    </div>
+</div>
+
 <button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">
     <i class="fas fa-bars"></i>
 </button>
@@ -19,6 +39,9 @@
         <a href="dashboard.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : '' ?>">
             <i class="fas fa-th-large"></i>
             <span>Dashboard</span>
+            <?php if ($low_stock_count > 0): ?>
+                <span class="nav-badge"><?= $low_stock_count ?></span>
+            <?php endif; ?>
         </a>
         <a href="barang.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'barang.php' ? 'active' : '' ?>">
             <i class="fas fa-boxes-stacked"></i>
@@ -27,6 +50,10 @@
         <a href="kategori.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'kategori.php' ? 'active' : '' ?>">
             <i class="fas fa-tags"></i>
             <span>Kategori</span>
+        </a>
+        <a href="supplier.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'supplier.php' ? 'active' : '' ?>">
+            <i class="fas fa-truck"></i>
+            <span>Supplier</span>
         </a>
 
         <div class="nav-section">Transaksi</div>
@@ -37,6 +64,10 @@
         <a href="keluar.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'keluar.php' ? 'active' : '' ?>">
             <i class="fas fa-arrow-up"></i>
             <span>Barang Keluar</span>
+        </a>
+        <a href="opname.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'opname.php' ? 'active' : '' ?>">
+            <i class="fas fa-clipboard-check"></i>
+            <span>Stok Opname</span>
         </a>
 
         <div class="nav-section">Laporan</div>
@@ -50,6 +81,10 @@
         <a href="users.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'users.php' ? 'active' : '' ?>">
             <i class="fas fa-users-cog"></i>
             <span>Kelola User</span>
+        </a>
+        <a href="log.php" class="nav-item <?= basename($_SERVER['PHP_SELF']) === 'log.php' ? 'active' : '' ?>">
+            <i class="fas fa-clipboard-list"></i>
+            <span>Log Aktivitas</span>
         </a>
         <?php endif; ?>
     </div>
@@ -69,3 +104,7 @@
         </a>
     </div>
 </nav>
+
+<!-- JS includes -->
+<script src="assets/js/validation.js"></script>
+<script src="assets/js/app.js"></script>
