@@ -39,8 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $users = $pdo->query("SELECT * FROM users ORDER BY role, nama_lengkap")->fetchAll();
 
-<?php include 'includes/header.php'; ?>
-
+include 'includes/header.php';
 include 'includes/sidebar.php';
 ?>
 

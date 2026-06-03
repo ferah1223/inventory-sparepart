@@ -88,8 +88,7 @@ $kategori_list = $pdo->query("SELECT * FROM kategori ORDER BY nama_kategori")->f
 $stmt = $pdo->query("SELECT COALESCE(SUM(stok * harga_beli), 0) as total FROM barang WHERE aktif = 1");
 $total_nilai_stok = $stmt->fetch()['total'];
 
-<?php include 'includes/header.php'; ?>
-
+include 'includes/header.php';
 include 'includes/sidebar.php';
 ?>
 
@@ -100,6 +99,15 @@ include 'includes/sidebar.php';
             <div class="page-header-sub">Kelola data spare part sepeda motor</div>
         </div>
         <div class="page-header-actions">
+            <a href="export.php?type=stok&format=csv" class="btn btn-outline btn-sm" title="Export Excel">
+                <i class="fas fa-file-csv"></i>
+            </a>
+            <a href="export.php?type=stok&format=pdf" target="_blank" class="btn btn-outline btn-sm" title="Export PDF">
+                <i class="fas fa-file-pdf"></i>
+            </a>
+            <a href="export.php?type=stok&format=print" target="_blank" class="btn btn-outline btn-sm" title="Print">
+                <i class="fas fa-print"></i>
+            </a>
             <button onclick="openModal('tambah')" class="btn btn-accent">
                 <i class="fas fa-plus"></i> Tambah Barang
             </button>

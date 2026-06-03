@@ -44,8 +44,7 @@ $kategori_list = $pdo->query("
     ORDER BY k.nama_kategori
 ")->fetchAll();
 
-<?php include 'includes/header.php'; ?>
-
+include 'includes/header.php';
 include 'includes/sidebar.php';
 ?>
 

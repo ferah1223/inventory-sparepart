@@ -13,7 +13,8 @@ Sistem inventarisasi barang gudang spare part sepeda motor berbasis web. Dibuat 
 - **Kategori** — Kelola kategori barang (Oli, Kampas Rem, Ban, dll)
 - **Barang Masuk** — Catat penerimaan barang dari supplier
 - **Barang Keluar** — Catat pengeluaran barang ke bengkel
-- **Laporan** — Statistik per bulan, per kategori, stok menipis
+- **Laporan** — Statistik per bulan, per kategori, stok menipis, detail transaksi
+- **Export Data** — Download Excel/CSV, PDF, dan Print dari setiap halaman
 - **Kelola User** — Manajemen akun admin dan operator
 
 ## Tech Stack
@@ -79,7 +80,8 @@ inventory-sparepart/
 ├── kategori.php           # CRUD kategori
 ├── masuk.php              # Barang masuk
 ├── keluar.php             # Barang keluar
-├── laporan.php            # Laporan inventaris
+├── laporan.php            # Laporan inventaris + detail transaksi
+├── export.php             # Export CSV, PDF, Print
 ├── users.php              # Kelola user (admin only)
 ├── logout.php             # Logout
 ├── database.sql           # Schema + data awal

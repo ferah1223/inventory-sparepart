@@ -107,8 +107,7 @@ $total_nilai = $stmt->fetch()['total'];
 
 $barang_list = $pdo->query("SELECT id, kode_barang, nama_barang, satuan, stok FROM barang WHERE aktif = 1 AND stok > 0 ORDER BY kode_barang")->fetchAll();
 
-<?php include 'includes/header.php'; ?>
-
+include 'includes/header.php';
 include 'includes/sidebar.php';
 ?>
 
@@ -119,6 +118,15 @@ include 'includes/sidebar.php';
             <div class="page-header-sub">Catat pengeluaran barang dari gudang</div>
         </div>
         <div class="page-header-actions">
+            <a href="export.php?type=keluar&format=csv&bulan=<?= date('m') ?>&tahun=<?= date('Y') ?>" class="btn btn-outline btn-sm" title="Export Excel">
+                <i class="fas fa-file-csv"></i>
+            </a>
+            <a href="export.php?type=keluar&format=pdf&bulan=<?= date('m') ?>&tahun=<?= date('Y') ?>" target="_blank" class="btn btn-outline btn-sm" title="Export PDF">
+                <i class="fas fa-file-pdf"></i>
+            </a>
+            <a href="export.php?type=keluar&format=print&bulan=<?= date('m') ?>&tahun=<?= date('Y') ?>" target="_blank" class="btn btn-outline btn-sm" title="Print">
+                <i class="fas fa-print"></i>
+            </a>
             <button onclick="openModal()" class="btn btn-accent">
                 <i class="fas fa-plus"></i> Tambah Transaksi
             </button>

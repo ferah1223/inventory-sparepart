@@ -55,8 +55,7 @@ $stok_menipis_list = $pdo->query("
     ORDER BY b.stok ASC LIMIT 5
 ")->fetchAll();
 
-<?php include 'includes/header.php'; ?>
-
+include 'includes/header.php';
 include 'includes/sidebar.php';
 ?>
 

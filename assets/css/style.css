@@ -1141,6 +1141,51 @@ code, pre {
     animation: fadeIn 0.3s ease forwards;
 }
 
+/* ============================================
+   Export & Print Styles
+   ============================================ */
+@media print {
+    body {
+        background: #fff !important;
+        padding: 0 !important;
+    }
+    .sidebar, .mobile-menu-btn, .page-header-actions,
+    .btn, .modal, .modal-overlay, .no-print,
+    .pagination, .search-box, .toolbar {
+        display: none !important;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        padding: 16px !important;
+        max-width: 100% !important;
+    }
+    .card {
+        box-shadow: none !important;
+        border: 1px solid #e2e8f0 !important;
+        break-inside: avoid;
+    }
+    .stat-grid {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+    .stat-card {
+        box-shadow: none !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    table {
+        font-size: 10px !important;
+    }
+    th {
+        background: #f1f5f9 !important;
+        color: #0f172a !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .badge {
+        border: 1px solid currentColor;
+    }
+    a { text-decoration: none; color: inherit; }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
     * {
