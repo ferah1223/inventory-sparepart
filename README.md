@@ -17,9 +17,17 @@
 
 ## Preview
 
+### Dashboard
+
 ![Dashboard](assets/img/dashboard.png)
 
-> Dashboard utama — ringkasan stok, grafik penjualan bulanan, distribusi per kategori, dan peringatan stok menipis.
+> Ringkasan stok, grafik penjualan bulanan (Chart.js), distribusi per kategori, dan peringatan stok menipis.
+
+### Laporan & Export
+
+![Laporan](assets/img/laporan.png)
+
+> Detail transaksi masuk/keluar per bulan, filter bulan & tahun, export ke Excel/CSV, PDF, atau langsung print.
 
 ---
 
